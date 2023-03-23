@@ -15,11 +15,10 @@ const (
 
 type node struct {
 	key       unsafe.Pointer
-	value     unsafe.Pointer
-	version   uint64
-	isDeleted bool
-
-	next []*node
+	lastValue unsafe.Pointer
+	vValues   []unsafe.Pointer
+	next      []*node
+	vNext     [][]*node
 }
 
 type SkipList struct {
@@ -67,35 +66,36 @@ func (s *SkipList) upsertNode(node *node, version uint64, key, value []byte) {
 	valueptr := s.valueArena.Append(value)
 
 	node.key = keyptr
-	node.value = valueptr
-	node.version = version
-	node.isDeleted = false
+	node.lastValue = valueptr
 
-	fmt.Printf(
-		"upsert -- key: %v, value: %v, isDeleted: %t, version: %d\n",
-		decode(node.key),
-		decode(node.value),
-		node.isDeleted,
-		node.version,
-	)
-	// handle versioning link
+	ivptr := (*internalVersionValue)(s.valueArena.Alloc(sizeIv))
+	ivptr.version = version
+	ivptr.value = valueptr
+
+	node.vValues = append(node.vValues, unsafe.Pointer(ivptr))
+
+	// handle version links!
+	//for _, v := range node.vValues {
+	//	iv := (*internalVersionValue)(v)
+	//}
+
 }
 
-// insertNode inserts a new node with the given key and value.
+// insertNode inserts a new node with the given key and lastValue.
 func (s *SkipList) Insert(key []byte, value []byte, version uint64) {
 	update := make([]*node, maxLevel)
 	x := s.head
 
 	for i := s.level - 1; i >= 0; i-- {
-		// If a node with the same key already exists, update its value and return the node.
-		if x.next[i] != nil && bytes.Equal(decode(x.next[i].key), key) {
-			s.upsertNode(x.next[i], version, key, value)
-			return
-		}
-
 		// Follow next pointers until we reach a node whose next pointer points to a node with a larger key.
 		for x.next[i] != nil && bytes.Compare(decode(x.next[i].key), key) < 0 {
 			x = x.next[i]
+		}
+
+		// If a node with the same key already exists, update its lastValue and return the node.
+		if x.next[i] != nil && bytes.Equal(decode(x.next[i].key), key) {
+			s.upsertNode(x.next[i], version, key, value)
+			return
 		}
 
 		update[i] = x
@@ -109,64 +109,48 @@ func (s *SkipList) Insert(key []byte, value []byte, version uint64) {
 		s.level = level
 	}
 
-	// assign new node
+	// assign new node ahd handle initialization
 	newNode := (*node)(s.nodeArena.Alloc(nodeSize))
-	s.upsertNode(newNode, version, key, value)
-
+	newNode.vValues = make([]unsafe.Pointer, 0)
 	newNode.next = make([]*node, level)
 	for i := 0; i < level; i++ {
 		newNode.next[i] = update[i].next[i]
 		update[i].next[i] = newNode
 	}
-}
-
-// Get returns the value associated with the given key, or nil if the key is not found.
-func (s *SkipList) Get(key []byte) []byte {
-	x := s.head
-	for i := s.level - 1; i >= 0; i-- {
-		for x.next[i] != nil && bytes.Compare(decode(x.next[i].key), key) <= 0 {
-			if bytes.Equal(decode(x.next[i].key), key) {
-				return decode(x.next[i].value)
-			}
-
-			x = x.next[i]
-		}
-
-	}
-	return nil
+	s.upsertNode(newNode, version, key, value)
 }
 
 func (s *SkipList) getNodePtr(key []byte) *node {
 	x := s.head
 	for i := s.level - 1; i >= 0; i-- {
-		if x.next[i] == nil {
-			break
-		}
-
-		nextKey := decode(x.next[i].key)
-		for bytes.Compare(nextKey, key) <= 0 {
-			if bytes.Equal(nextKey, key) {
+		for x.next[i] != nil {
+			nkey := decode(x.next[i].key)
+			cmp := bytes.Compare(nkey, key)
+			if cmp == -1 {
+				x = x.next[i]
+			} else if cmp == 0 {
 				return x.next[i]
+			} else {
+				break
 			}
-			x = x.next[i]
 		}
 	}
-	return x
+	return nil
+}
+
+// Get returns the lastValue associated with the given key, or nil if the key is not found.
+func (s *SkipList) Get(key []byte) []byte {
+	return decode(s.getNodePtr(key).lastValue)
 }
 
 func (s *SkipList) GetVersion(key []byte, version uint64) []byte {
-	return nil
-	//node := s.getNodePtr(key)
-	//
-	////valueAtVersion, ok := node.valueAtVersion[version]
-	//if !ok {
-	//	return nil
-	//}
-	//
-	//valptr := (*[]byte)(valueAtVersion)
-	//valsize := fromBigEndian(*(valptr))
-	//valval := (*valptr)[8 : 8+valsize]
+	node := s.getNodePtr(key)
+	verptr := findNearestVersion(node.vValues, version)
+	iv := (*internalVersionValue)(verptr)
 
+	fmt.Println(iv.version, string(decode(iv.value)))
+
+	return decode(iv.value)
 }
 
 func toBigEndian(n uint64) []byte {
