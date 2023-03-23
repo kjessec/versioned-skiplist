@@ -1,5 +1,9 @@
 package kevtech
 
+import (
+	"bytes"
+)
+
 type iterator struct {
 	skl   *SkipList
 	start []byte
@@ -7,6 +11,25 @@ type iterator struct {
 
 	cursor  *node
 	version uint64
+}
+
+func (s *SkipList) getNearestNodePtr(key []byte) *node {
+	x := s.head
+	for i := s.level - 1; i >= 0; i-- {
+		for x.next[i] != nil {
+			nkey := decode(x.next[i].key)
+			cmp := bytes.Compare(nkey, key)
+			if cmp == -1 {
+				x = x.next[i]
+			} else if cmp == 0 {
+				return x.next[i]
+			} else {
+				break
+			}
+		}
+	}
+
+	return x.next[0]
 }
 
 func (s *SkipList) Iterate(start, end []byte) (*iterator, error) {
@@ -23,13 +46,14 @@ func (s *SkipList) IterateWithVersion(start, end []byte, version uint64) (*itera
 		version: s.lastVersion,
 	}
 
-	it.Next()
+	// load up first cursor
+	it.First()
 
 	return it, nil
 }
 
 func (it *iterator) First() {
-	it.cursor = it.skl.getNodePtr(it.start)
+	it.cursor = it.skl.getNearestNodePtr(it.start)
 }
 
 func (it *iterator) Next() {
@@ -37,18 +61,17 @@ func (it *iterator) Next() {
 }
 
 func (it *iterator) Valid() bool {
-	return it.cursor != nil
+	return it.cursor != nil && bytes.Compare(decode(it.cursor.key), it.end) == -1
 }
 
 func (it *iterator) Key() []byte {
-	return nil
-	//return it.cursor.valueAtVersion[it.version]
+	return decode(it.cursor.key)
 }
 
 func (it *iterator) Value() []byte {
-	return nil
+	return decode(it.cursor.lastValue)
 }
 
 func (it *iterator) Close() {
-
+	*it = *(*iterator)(nil)
 }

@@ -135,22 +135,32 @@ func (s *SkipList) getNodePtr(key []byte) *node {
 			}
 		}
 	}
+
+	// not found; this is out-of-bounds error
 	return nil
 }
 
 // Get returns the lastValue associated with the given key, or nil if the key is not found.
 func (s *SkipList) Get(key []byte) []byte {
+	node := s.getNodePtr(key)
+	if node == nil {
+		return nil
+	}
+
 	return decode(s.getNodePtr(key).lastValue)
 }
 
 func (s *SkipList) GetVersion(key []byte, version uint64) []byte {
 	node := s.getNodePtr(key)
+	if node == nil {
+		return nil
+	}
+
 	verptr := findNearestVersion(node.vValues, version)
 	iv := (*internalVersionValue)(verptr)
 
-	fmt.Println(iv.version, string(decode(iv.value)))
-
 	return decode(iv.value)
+
 }
 
 func toBigEndian(n uint64) []byte {
@@ -167,13 +177,4 @@ func fromBigEndian(b [8]byte) uint64 {
 		n |= uint64(b[7-i]) << (i * 8)
 	}
 	return n
-}
-
-func arenaAlloc(arena []byte, size int) []byte {
-	if len(arena) < size {
-		panic("arena too small")
-	}
-	alloc := arena[:size]
-	arena = arena[size:]
-	return alloc
 }
