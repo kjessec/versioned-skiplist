@@ -1,11 +1,14 @@
 package kevtech
 
 import (
-	"fmt"
 	"unsafe"
 )
 
 type Arena []byte
+
+const (
+	sizeLen = 8
+)
 
 func NewArena(size uint64) *Arena {
 	a := &Arena{}
@@ -18,7 +21,6 @@ func (a *Arena) Alloc(size int) unsafe.Pointer {
 	if len(*a) < int(size) {
 		panic("arena too small")
 	}
-	fmt.Printf("alloc %d\n", size)
 
 	alloc := (*a)[:size]
 	*a = (*a)[size:]
@@ -27,8 +29,8 @@ func (a *Arena) Alloc(size int) unsafe.Pointer {
 }
 
 func (a *Arena) Append(value []byte) (head unsafe.Pointer) {
-	ptr := a.Alloc(len(value))
-	copy((*(*[1 << 30]byte)(ptr))[:], value)
-
+	ptr := a.Alloc(8 + len(value))
+	copy((*(*[1 << 30]byte)(ptr))[:], toBigEndian(uint64(len(value))))
+	copy((*(*[1 << 30]byte)(ptr))[8:], value)
 	return ptr
 }
