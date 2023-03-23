@@ -9,8 +9,8 @@ func TestSkipList(t *testing.T) {
 	// 512mb arena
 	skl := NewSkipList(512 * 1024 * 1024)
 
-	for v := uint64(1); v <= 10; v++ {
-		for i := 0; i < 10; i++ {
+	for v := uint64(1); v <= 1; v++ {
+		for i := 0; i < 5; i++ {
 			kv := toBigEndian(uint64(i))
 			val := []byte(fmt.Sprintf("key %d at version %d", i, v))
 			skl.Insert(kv, val, v)

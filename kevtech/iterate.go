@@ -10,7 +10,7 @@ type iterator struct {
 }
 
 func (s *SkipList) Iterate(start, end []byte) (*iterator, error) {
-	return s.IterateWithVersion(start, end, s.version)
+	return s.IterateWithVersion(start, end, s.lastVersion)
 }
 
 func (s *SkipList) IterateWithVersion(start, end []byte, version uint64) (*iterator, error) {
@@ -20,7 +20,7 @@ func (s *SkipList) IterateWithVersion(start, end []byte, version uint64) (*itera
 		end:   end,
 
 		cursor:  nil,
-		version: s.version,
+		version: s.lastVersion,
 	}
 
 	it.Next()
@@ -41,7 +41,8 @@ func (it *iterator) Valid() bool {
 }
 
 func (it *iterator) Key() []byte {
-	return it.cursor.valueAtVersion[it.version]
+	return nil
+	//return it.cursor.valueAtVersion[it.version]
 }
 
 func (it *iterator) Value() []byte {
